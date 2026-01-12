@@ -1,0 +1,25 @@
+{
+  "name": "twitch-comment-notifier",
+  "version": "1.0.0",
+  "description": "Twitch コメント受信時に通知音を再生するツール",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": ["twitch", "notification", "chat"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "tmi.js": "^1.8.5",
+    "dotenv": "^16.3.1",
+    "play-sound": "^1.1.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.6",
+    "@types/tmi.js": "^1.8.2"
+  }
+}
