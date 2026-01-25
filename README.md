@@ -49,15 +49,23 @@ npm run setup
 `.env` ファイルに以下の情報を追記します:
 
 ```env
-TWITCH_USERNAME=your_username
+TWITCH_USERNAME=your_twitch_username
 TWITCH_CHANNELS=channel1,channel2,channel3
 NOTIFICATION_SOUND_PATH=./sounds/notification.mp3
 ```
 
-`TWITCH_OAUTH_TOKEN` はセットアップツールで自動設定された情報です。
+- `TWITCH_USERNAME`: Twitch のユーザー名（小文字）
+- `TWITCH_CHANNELS`: 通知したいチャンネル名（カンマ区切り）
+- `NOTIFICATION_SOUND_PATH`: 通知音ファイル
+- `TWITCH_OAUTH_TOKEN`: セットアップツールで自動設定されたトークン
 
-`./sounds/notification.mp3` に通知音ファイルを配置してください。
+#### セキュリティに関する注意
 
+- `.env` ファイルを Git リポジトリにコミットしないでください
+- OAuth トークンを他者と共有しないでください
+- トークンが漏洩した場合は、すぐに Twitch のセキュリティ設定から無効化してください
+
+`./sounds/notification.mp3` に通知音ファイルを配置してください。  
 好きな音声ファイル（MP3, WAV など）を使用できます。
 
 ## 実行
@@ -81,15 +89,6 @@ npm run build
 ```bash
 npm start
 ```
-
-## 環境変数の説明
-
-| 環境変数 | 説明 | 例 |
-|---------|------|-----|
-| `TWITCH_USERNAME` | Twitch のユーザー名 | `myusername` |
-| `TWITCH_CHANNELS` | 監視するチャンネル（カンマ区切り） | `channel1,channel2` |
-| `NOTIFICATION_SOUND_PATH` | 通知音ファイルのパス | `./sounds/notification.mp3` |
-| `TWITCH_OAUTH_TOKEN` | OAuth トークン（自動設定） | 設定不要 |
 
 ## 停止
 
