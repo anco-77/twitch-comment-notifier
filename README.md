@@ -16,32 +16,56 @@ npm install
 
 ## セットアップ
 
-### 1. Twitch OAuth トークンの取得
+### 1. Client ID と Client Secret の取得
 
-以下のサイトから OAuth トークンを取得してください:
-https://twitchtokengenerator.com/
+以下のサイトで Twitch Application を登録してください:
+https://dev.twitch.tv/console/apps
 
-必要なスコープ:
-- `chat:read`
+登録後、以下の情報を取得します:
+- Client ID
+- Client Secret
 
-### 2. 環境変数の設定
+必要なリダイレクト URI:
+- `http://localhost:3000/callback`
 
-`.env` ファイルを作成して、以下の情報を設定します:
+### 2. OAuth トークンの自動取得
+
+以下のコマンドでセットアップツールを実行します:
+
+```bash
+npm run setup
+```
+
+セットアップツールが起動し、以下を求められます:
+1. Client ID を入力
+2. Client Secret を入力
+
+その後、表示されたURLをブラウザで開きます。
+
+認可を完了すると、トークンが自動的に `.env` ファイルに保存されます。
+
+### 3. 環境変数の設定
+
+`.env` ファイルに以下の情報を追記します:
 
 ```env
 TWITCH_USERNAME=your_username
-TWITCH_OAUTH_TOKEN=your_oauth_token
 TWITCH_CHANNELS=channel1,channel2,channel3
 NOTIFICATION_SOUND_PATH=./sounds/notification.mp3
 ```
 
-### 3. 通知音の配置
+`TWITCH_OAUTH_TOKEN` はセットアップツールで自動設定された情報です。
 
 `./sounds/notification.mp3` に通知音ファイルを配置してください。
 
 好きな音声ファイル（MP3, WAV など）を使用できます。
 
 ## 実行
+
+### セットアップ（初回のみ）
+```bash
+npm run setup
+```
 
 ### 開発モード（ホットリロードあり）
 ```bash
@@ -63,9 +87,9 @@ npm start
 | 環境変数 | 説明 | 例 |
 |---------|------|-----|
 | `TWITCH_USERNAME` | Twitch のユーザー名 | `myusername` |
-| `TWITCH_OAUTH_TOKEN` | OAuth トークン（`oauth:` プレフィックスなし） | `abcdef1234567890` |
 | `TWITCH_CHANNELS` | 監視するチャンネル（カンマ区切り） | `channel1,channel2` |
 | `NOTIFICATION_SOUND_PATH` | 通知音ファイルのパス | `./sounds/notification.mp3` |
+| `TWITCH_OAUTH_TOKEN` | OAuth トークン（自動設定） | 設定不要 |
 
 ## 停止
 

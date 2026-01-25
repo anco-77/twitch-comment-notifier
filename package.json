@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "setup": "ts-node src/oauth-setup.ts"
   },
   "keywords": ["twitch", "notification", "chat"],
   "author": "",
@@ -14,7 +15,8 @@
   "dependencies": {
     "tmi.js": "^1.8.5",
     "dotenv": "^16.3.1",
-    "play-sound": "^1.1.5"
+    "play-sound": "^1.1.5",
+    "axios": "^1.6.5"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
