@@ -1,7 +1,9 @@
 import * as tmi from 'tmi.js';
-import * as playSound from 'play-sound';
+import playSound from 'play-sound';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
 
 // 環境変数を読み込む
 dotenv.config();
@@ -82,21 +84,77 @@ class TwitchCommentNotifier {
     });
 
     // エラーハンドラー
-    this.client.on('error', (error: Error) => {
+    this.client.on('error' as any, (error: Error) => {
       console.error('エラーが発生しました:', error.message);
     });
   }
 
   private playNotification(): void {
     try {
-      this.player.play(this.config.notification_sound_path, (err: any) => {
-        if (err) {
-          console.error('通知音の再生に失敗しました:', err.message);
-        }
-      });
+      // WSL2またはLinuxの場合の処理
+      if (this.isWSL()) {
+        this.playNotificationOnWSL();
+      } else if (process.platform === 'win32') {
+        this.playNotificationOnWindows();
+      } else {
+        // その他のプラットフォーム（macOS、Linux など）
+        this.player.play(this.config.notification_sound_path, (err: any) => {
+          if (err) {
+            console.error('通知音の再生に失敗しました:', err.message);
+          }
+        });
+      }
     } catch (error) {
       if (error instanceof Error) {
         console.error('通知音の再生エラー:', error.message);
+      }
+    }
+  }
+
+  private isWSL(): boolean {
+    try {
+      const procVersion = fs.readFileSync('/proc/version', 'utf8');
+      return procVersion.toLowerCase().includes('microsoft') || procVersion.toLowerCase().includes('wsl');
+    } catch {
+      return false;
+    }
+  }
+
+  private playNotificationOnWSL(): void {
+    try {
+      let soundPath = this.config.notification_sound_path;
+      
+      // Windows パス（C:\... または C:/...）かどうか判定
+      const isWindowsPath = /^[a-zA-Z]:[/\\]/.test(soundPath);
+      
+      if (!isWindowsPath) {
+        // Linux パスの場合は /mnt/c に変換
+        soundPath = soundPath
+          .replace(/^\/mnt\/([a-z])\//, '$1:\\')
+          .replace(/\//g, '\\');
+      }
+      
+      // バックスラッシュをエスケープ
+      const escapedPath = soundPath.replace(/\\/g, '\\\\');
+      
+      // PowerShellコマンドを実行（Start-Process で既定のプレイヤーで再生）
+      const psCommand = `Start-Process '${escapedPath}'`;
+      execSync(`powershell.exe -Command "${psCommand}"`, { stdio: 'ignore' });
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('WSL2での音声再生に失敗しました:', error.message);
+      }
+    }
+  }
+
+  private playNotificationOnWindows(): void {
+    try {
+      const soundPath = path.resolve(this.config.notification_sound_path);
+      const psCommand = `(New-Object Media.SoundPlayer "${soundPath}").PlaySync()`;
+      execSync(`powershell.exe -Command "${psCommand}"`, { stdio: 'ignore' });
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Windows での音声再生に失敗しました:', error.message);
       }
     }
   }

@@ -9,19 +9,24 @@
     "dev": "ts-node src/index.ts",
     "setup": "ts-node src/oauth-setup.ts"
   },
-  "keywords": ["twitch", "notification", "chat"],
+  "keywords": [
+    "twitch",
+    "notification",
+    "chat"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "tmi.js": "^1.8.5",
+    "axios": "^1.6.5",
     "dotenv": "^16.3.1",
     "play-sound": "^1.1.5",
-    "axios": "^1.6.5"
+    "tmi.js": "^1.8.5"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "ts-node": "^10.9.2",
     "@types/node": "^20.10.6",
-    "@types/tmi.js": "^1.8.2"
+    "@types/play-sound": "^1.1.2",
+    "@types/tmi.js": "^1.8.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   }
 }

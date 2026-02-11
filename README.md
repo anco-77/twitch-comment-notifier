@@ -59,6 +59,26 @@ NOTIFICATION_SOUND_PATH=./sounds/notification.mp3
 - `NOTIFICATION_SOUND_PATH`: 通知音ファイル
 - `TWITCH_OAUTH_TOKEN`: セットアップツールで自動設定されたトークン
 
+#### WSL2を使用している場合
+
+Windows側に音声ファイルを配置して、Windows パスを指定してください:
+
+```env
+NOTIFICATION_SOUND_PATH=C:/Users/YourUsername/notification.mp3
+```
+
+または `/mnt/c/` パスで指定：
+
+```env
+NOTIFICATION_SOUND_PATH=/mnt/c/Users/YourUsername/notification.mp3
+```
+
+#### 音声再生について（WSL2）
+
+このアプリケーションは、WSL2上で実行される場合、Windows上の既定のサウンドプレイヤー（Groove Music など）が自動で起動して、指定された音声ファイルが再生されます。
+
+コメント受信時に既定のサウンドプレイヤーウィンドウが開き、音が再生されます。
+
 #### セキュリティに関する注意
 
 - `.env` ファイルを Git リポジトリにコミットしないでください
