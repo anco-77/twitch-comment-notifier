@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import axios from 'axios';
 
 // 環境変数を読み込む
 dotenv.config();
@@ -11,6 +12,8 @@ dotenv.config();
 interface Config {
   username: string;
   oauth_token: string;
+  refresh_token: string;
+  client_id: string;
   channels: string[];
   notification_sound_path: string;
 }
@@ -20,12 +23,15 @@ class TwitchCommentNotifier {
   private player: any;
   private config: Config;
   private isConnected: boolean = false;
+  private refreshInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // 環境変数から設定を読み込む
     this.config = {
       username: process.env.TWITCH_USERNAME || '',
       oauth_token: process.env.TWITCH_OAUTH_TOKEN || '',
+      refresh_token: process.env.TWITCH_REFRESH_TOKEN || '',
+      client_id: process.env.TWITCH_CLIENT_ID || '',
       channels: (process.env.TWITCH_CHANNELS || '').split(',').map(c => c.trim()),
       notification_sound_path: process.env.NOTIFICATION_SOUND_PATH || './sounds/notification.mp3'
     };
@@ -159,10 +165,100 @@ class TwitchCommentNotifier {
     }
   }
 
+  private async refreshAccessToken(): Promise<void> {
+    // リフレッシュトークンがない場合はスキップ
+    if (!this.config.refresh_token || !this.config.client_id) {
+      console.warn('リフレッシュトークンまたはクライアントIDが見つかりません。トークン更新機能が無効です。');
+      return;
+    }
+
+    try {
+      const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+        params: {
+          client_id: this.config.client_id,
+          grant_type: 'refresh_token',
+          refresh_token: this.config.refresh_token
+        }
+      });
+
+      const newToken = response.data.access_token;
+      const newRefreshToken = response.data.refresh_token;
+
+      // トークンを更新
+      this.config.oauth_token = newToken;
+      this.config.refresh_token = newRefreshToken;
+
+      // .env ファイルを更新
+      this.updateEnvFile(newToken, newRefreshToken);
+
+      console.log('✓ アクセストークンを更新しました。');
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.message === 'authorization_pending') {
+        // 認可待ちの場合は無視
+        return;
+      }
+
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        console.warn('トークンリフレッシュに失敗しました: リフレッシュトークンが無効です。', error.message);
+        console.warn('セットアップツールを再実行してください: npm run setup');
+        return;
+      }
+
+      if (error instanceof Error) {
+        console.warn('トークンのリフレッシュに失敗しました:', error.message);
+        console.warn('30日以上使用しない場合は、`npm run setup` を再実行してください。');
+      }
+    }
+  }
+
+  private updateEnvFile(token: string, refreshToken: string): void {
+    try {
+      const envPath = path.join(process.cwd(), '.env');
+      let envContent = '';
+
+      if (fs.existsSync(envPath)) {
+        envContent = fs.readFileSync(envPath, 'utf-8');
+      }
+
+      // トークンを更新
+      envContent = envContent.replace(/TWITCH_OAUTH_TOKEN=.*/, `TWITCH_OAUTH_TOKEN=${token}`);
+      if (!envContent.includes('TWITCH_OAUTH_TOKEN')) {
+        envContent += `\nTWITCH_OAUTH_TOKEN=${token}\n`;
+      }
+
+      // リフレッシュトークンを更新
+      envContent = envContent.replace(/TWITCH_REFRESH_TOKEN=.*/, `TWITCH_REFRESH_TOKEN=${refreshToken}`);
+      if (!envContent.includes('TWITCH_REFRESH_TOKEN')) {
+        envContent += `TWITCH_REFRESH_TOKEN=${refreshToken}\n`;
+      }
+
+      fs.writeFileSync(envPath, envContent.trim() + '\n');
+    } catch (error) {
+      console.error('.env ファイルの更新に失敗しました:', error);
+    }
+  }
+
+  private startTokenRefreshInterval(): void {
+    // 初回のリフレッシュ試行（デバイスコードが有効か確認）
+    setTimeout(() => {
+      this.refreshAccessToken();
+    }, 1000);
+  }
+
+  private stopTokenRefreshInterval(): void {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+    }
+  }
+
   public async connect(): Promise<void> {
     try {
       console.log('Twitch に接続中...');
       await this.client.connect();
+
+      // トークンリフレッシュを開始
+      this.startTokenRefreshInterval();
     } catch (error) {
       if (error instanceof Error) {
         console.error('接続エラー:', error.message);
@@ -173,6 +269,9 @@ class TwitchCommentNotifier {
 
   public async disconnect(): Promise<void> {
     try {
+      // トークンリフレッシュを停止
+      this.stopTokenRefreshInterval();
+
       if (this.isConnected) {
         await this.client.disconnect();
         console.log('Twitch から切断しました。');

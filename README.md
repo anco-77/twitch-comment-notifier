@@ -28,7 +28,7 @@ https://dev.twitch.tv/console/apps
 必要なリダイレクト URI:
 - `http://localhost:3000/callback`
 
-### 2. OAuth トークンの自動取得
+### 2. OAuth トークンの自動取得（Device Code Grant Flow）
 
 以下のコマンドでセットアップツールを実行します:
 
@@ -38,26 +38,41 @@ npm run setup
 
 セットアップツールが起動し、以下を求められます:
 1. Client ID を入力
-2. Client Secret を入力
 
-その後、表示されたURLをブラウザで開きます。
+その後、以下が表示されます:
+- ユーザーコード（8文字）
+- 認可用 URL
 
-認可を完了すると、トークンが自動的に `.env` ファイルに保存されます。
+**ユーザーコード**をメモして、表示された URL をブラウザで開き、コードを入力して認可します。
+
+認可が完了すると、トークンが自動的に `.env` ファイルに保存されます。
+
+**重要**: Device Code Grant Flow を使用しているため、`client_secret` は保存されません。これにより以下のセキュリティメリットがあります:
+- `.env` に秘密鍵が保存されない
+- ローカルマシンに秘密情報が残らない
+- リフレッシュトークンのみで自動更新が可能
 
 ### 3. 環境変数の設定
 
 `.env` ファイルに以下の情報を追記します:
 
 ```env
+TWITCH_CLIENT_ID=your_client_id
 TWITCH_USERNAME=your_twitch_username
 TWITCH_CHANNELS=channel1,channel2,channel3
 NOTIFICATION_SOUND_PATH=./sounds/notification.mp3
+TWITCH_OAUTH_TOKEN=auto_saved_by_setup_tool
+TWITCH_REFRESH_TOKEN=auto_saved_by_setup_tool
 ```
 
+- `TWITCH_CLIENT_ID`: Twitch 開発者コンソールで取得したクライアント ID（セットアップツールで自動保存）
 - `TWITCH_USERNAME`: Twitch のユーザー名（小文字）
 - `TWITCH_CHANNELS`: 通知したいチャンネル名（カンマ区切り）
 - `NOTIFICATION_SOUND_PATH`: 通知音ファイル
-- `TWITCH_OAUTH_TOKEN`: セットアップツールで自動設定されたトークン
+- `TWITCH_OAUTH_TOKEN`: セットアップツールで自動設定されたアクセストークン
+- `TWITCH_REFRESH_TOKEN`: セットアップツールで自動設定されたリフレッシュトークン（トークン自動更新に必要）
+
+**注意**: `TWITCH_CLIENT_SECRET` は必要ありません（セキュリティ上の理由）
 
 #### WSL2を使用している場合
 
@@ -115,6 +130,19 @@ npm start
 ツールを停止するには、ターミナルで `Ctrl + C` を押します。
 
 ## トラブルシューティング
+
+### トークン更新エラーが表示される場合
+
+Device Code Grant Flow のリフレッシュトークンは以下の特性があります:
+
+- **30日間の有効期限**: パブリッククライアント型のため、リフレッシュトークンは 30日以上使用しないと失効します
+- **ワンタイム使用**: 使用すると新しいリフレッシュトークンに更新されます（自動的に .env に保存）
+
+30日以上アプリケーションを実行していない場合は、以下のコマンドで再度セットアップしてください:
+
+```bash
+npm run setup
+```
 
 ### 通知音が再生されない場合
 

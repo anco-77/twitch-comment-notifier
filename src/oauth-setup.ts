@@ -1,41 +1,40 @@
-import * as http from 'http';
-import * as url from 'url';
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import * as readline from 'readline';
 
-const TWITCH_CLIENT_ID = 'YOUR_CLIENT_ID'; // ユーザーが設定する
-const REDIRECT_URI = 'http://localhost:3000/callback';
 const SCOPES = ['chat:read'];
+
+interface DeviceCodeResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
 
 interface TokenResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
   expires_in: number;
   scope: string[];
 }
 
 class OAuthSetup {
-  private server: http.Server | null = null;
   private clientId: string = '';
-  private clientSecret: string = '';
 
   async start(): Promise<void> {
     console.log('\n=== Twitch OAuth トークン取得ツール ===\n');
 
-    // クライアント ID とシークレットを入力
-    await this.getClientCredentials();
+    // クライアント ID を入力
+    await this.getClientId();
 
-    // 認可 URL を生成
-    const authUrl = this.generateAuthUrl();
-    console.log(`\n以下のURLをブラウザで開いてください:\n${authUrl}\n`);
-
-    // コールバックサーバーを起動
-    await this.startCallbackServer();
+    // Device Code Flow を開始
+    await this.startDeviceCodeFlow();
   }
 
-  private async getClientCredentials(): Promise<void> {
+  private async getClientId(): Promise<void> {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
@@ -44,104 +43,100 @@ class OAuthSetup {
     return new Promise((resolve) => {
       rl.question('Twitch Client ID を入力してください: ', (clientId) => {
         this.clientId = clientId;
-        rl.question('Twitch Client Secret を入力してください: ', (clientSecret) => {
-          this.clientSecret = clientSecret;
-          rl.close();
-          resolve();
-        });
+        rl.close();
+        resolve();
       });
     });
   }
 
-  private generateAuthUrl(): string {
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      scope: SCOPES.join(' ')
-    });
+  private async startDeviceCodeFlow(): Promise<void> {
+    try {
+      // ステップ1: Device Code を取得
+      const deviceCodeResponse = await this.getDeviceCode();
+      
+      console.log('\n========================================');
+      console.log('以下のコードをブラウザに入力してください:');
+      console.log(`\n  ${deviceCodeResponse.user_code}`);
+      console.log('\n========================================');
+      console.log(`以下のURLにアクセスしてください:\n${deviceCodeResponse.verification_uri}\n`);
 
-    return `https://id.twitch.tv/oauth2/authorize?${params.toString()}`;
+      // ステップ2: ユーザーの認可を待ち、トークンを取得
+      const token = await this.pollForToken(
+        deviceCodeResponse.device_code,
+        deviceCodeResponse.interval,
+        deviceCodeResponse.expires_in
+      );
+
+      // ステップ3: トークンを .env に保存
+      await this.saveToken(token.access_token, token.refresh_token);
+
+      console.log('\n✓ OAuth トークンが正常に取得されました。');
+      console.log('アプリケーションを実行してください。\n');
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('エラーが発生しました:', error.message);
+      }
+      process.exit(1);
+    }
   }
 
-  private startCallbackServer(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server = http.createServer(async (req, res) => {
-        const parsedUrl = url.parse(req.url || '', true);
-        const pathname = parsedUrl.pathname;
-        const query = parsedUrl.query;
-
-        if (pathname === '/callback') {
-          const code = query.code as string;
-          const error = query.error as string;
-
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`<h1>エラーが発生しました</h1><p>${error}</p>`);
-            this.server?.close();
-            console.error(`認可エラー: ${error}`);
-            resolve();
-            return;
-          }
-
-          if (!code) {
-            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end('<h1>認可コードが見つかりません</h1>');
-            this.server?.close();
-            resolve();
-            return;
-          }
-
-          try {
-            // トークンを取得
-            const token = await this.exchangeCodeForToken(code);
-            
-            // .env ファイルに保存
-            await this.saveToken(token.access_token);
-
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`
-              <h1>✓ 認可が完了しました</h1>
-              <p>トークンが .env ファイルに保存されました。</p>
-              <p>このウィンドウを閉じて、アプリケーションを実行してください。</p>
-            `);
-
-            console.log('\n✓ OAuth トークンが正常に取得されました。');
-            this.server?.close();
-            resolve();
-          } catch (error) {
-            res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`<h1>エラーが発生しました</h1><p>${error instanceof Error ? error.message : '不明なエラー'}</p>`);
-            this.server?.close();
-            resolve();
-          }
-        } else {
-          res.writeHead(404);
-          res.end('Not Found');
-        }
-      });
-
-      this.server.listen(3000, () => {
-        console.log('コールバックサーバーが localhost:3000 で起動しました。');
-      });
-    });
-  }
-
-  private async exchangeCodeForToken(code: string): Promise<TokenResponse> {
-    const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+  private async getDeviceCode(): Promise<DeviceCodeResponse> {
+    const response = await axios.post('https://id.twitch.tv/oauth2/device', null, {
       params: {
         client_id: this.clientId,
-        client_secret: this.clientSecret,
-        code: code,
-        grant_type: 'authorization_code',
-        redirect_uri: REDIRECT_URI
+        scopes: SCOPES.join(' ')
       }
     });
 
-    return response.data as TokenResponse;
+    return response.data as DeviceCodeResponse;
   }
 
-  private async saveToken(token: string): Promise<void> {
+  private async pollForToken(
+    deviceCode: string,
+    interval: number,
+    expiresIn: number
+  ): Promise<TokenResponse> {
+    const startTime = Date.now();
+    const expirationTime = startTime + expiresIn * 1000;
+
+    while (Date.now() < expirationTime) {
+      try {
+        const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+          params: {
+            client_id: this.clientId,
+            scopes: SCOPES.join(' '),
+            device_code: deviceCode,
+            grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+          }
+        });
+
+        return response.data as TokenResponse;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+          const errorMessage = error.response.data?.message;
+          
+          // authorization_pending の場合は待機
+          if (errorMessage === 'authorization_pending') {
+            console.log('待機中...');
+            await this.delay(interval * 1000);
+            continue;
+          }
+
+          // その他のエラーは throw
+          throw new Error(`トークン取得エラー: ${errorMessage || error.message}`);
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('認可がタイムアウトしました。もう一度実行してください。');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async saveToken(token: string, refreshToken: string): Promise<void> {
     const envPath = path.join(process.cwd(), '.env');
     let envContent = '';
 
@@ -150,13 +145,29 @@ class OAuthSetup {
       envContent = fs.readFileSync(envPath, 'utf-8');
       // 既存のトークンを削除
       envContent = envContent.replace(/TWITCH_OAUTH_TOKEN=.*/g, '');
+      envContent = envContent.replace(/TWITCH_REFRESH_TOKEN=.*/g, '');
+      envContent = envContent.replace(/TWITCH_CLIENT_ID=.*/g, '');
     }
 
-    // トークンを追加
+    // アクセストークンを追加
     if (!envContent.includes('TWITCH_OAUTH_TOKEN')) {
       envContent += `\nTWITCH_OAUTH_TOKEN=${token}\n`;
     } else {
       envContent = envContent.replace(/TWITCH_OAUTH_TOKEN=.*/, `TWITCH_OAUTH_TOKEN=${token}`);
+    }
+
+    // リフレッシュトークンを追加
+    if (!envContent.includes('TWITCH_REFRESH_TOKEN')) {
+      envContent += `TWITCH_REFRESH_TOKEN=${refreshToken}\n`;
+    } else {
+      envContent = envContent.replace(/TWITCH_REFRESH_TOKEN=.*/, `TWITCH_REFRESH_TOKEN=${refreshToken}`);
+    }
+
+    // Client ID を追加
+    if (!envContent.includes('TWITCH_CLIENT_ID')) {
+      envContent += `TWITCH_CLIENT_ID=${this.clientId}\n`;
+    } else {
+      envContent = envContent.replace(/TWITCH_CLIENT_ID=.*/, `TWITCH_CLIENT_ID=${this.clientId}`);
     }
 
     fs.writeFileSync(envPath, envContent.trim() + '\n');
