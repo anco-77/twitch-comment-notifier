@@ -19,7 +19,7 @@ interface Config {
 }
 
 class TwitchCommentNotifier {
-  private client: tmi.Client;
+  private client!: tmi.Client;
   private player: any;
   private config: Config;
   private isConnected: boolean = false;
@@ -42,6 +42,17 @@ class TwitchCommentNotifier {
     }
 
     // Twitch クライアントを初期化
+    this.createClient();
+
+    // play-sound を初期化
+    this.player = playSound();
+
+    // イベントハンドラーを登録
+    this.registerEventHandlers();
+  }
+
+  private createClient(): void {
+    // Twitch クライアントを初期化
     this.client = new tmi.Client({
       options: { debug: false },
       connection: {
@@ -54,12 +65,6 @@ class TwitchCommentNotifier {
       },
       channels: this.config.channels
     });
-
-    // play-sound を初期化
-    this.player = playSound();
-
-    // イベントハンドラーを登録
-    this.registerEventHandlers();
   }
 
   private registerEventHandlers(): void {
@@ -191,6 +196,13 @@ class TwitchCommentNotifier {
       // .env ファイルを更新
       this.updateEnvFile(newToken, newRefreshToken);
 
+      // 接続中の場合は、トークンの値だけ更新して接続を保持する
+      // 接続していない場合のみクライアントを再初期化
+      if (!this.isConnected) {
+        this.createClient();
+        this.registerEventHandlers();
+      }
+
       console.log('✓ アクセストークンを更新しました。');
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.data?.message === 'authorization_pending') {
@@ -239,10 +251,10 @@ class TwitchCommentNotifier {
   }
 
   private startTokenRefreshInterval(): void {
-    // 初回のリフレッシュ試行（デバイスコードが有効か確認）
-    setTimeout(() => {
+    // 55分ごとにトークンをリフレッシュ
+    this.refreshInterval = setInterval(() => {
       this.refreshAccessToken();
-    }, 1000);
+    }, 55 * 60 * 1000);
   }
 
   private stopTokenRefreshInterval(): void {
@@ -255,6 +267,10 @@ class TwitchCommentNotifier {
   public async connect(): Promise<void> {
     try {
       console.log('Twitch に接続中...');
+      
+      // 接続前にトークンをリフレッシュ
+      await this.refreshAccessToken();
+      
       await this.client.connect();
 
       // トークンリフレッシュを開始
